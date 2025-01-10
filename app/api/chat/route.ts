@@ -1,35 +1,29 @@
+import { ToolInvocation, convertToCoreMessages, streamText } from "ai";
 import { openai } from "@ai-sdk/openai";
-import { vertex } from "@ai-sdk/google-vertex";
-import { convertToCoreMessages, streamText } from "ai";
 import { z } from "zod";
 
-const TIME_API_URL = "https://worldtimeapi.org/api/ip";
+interface Message {
+  role: "user" | "assistant";
+  content: string;
+  toolInvocations?: ToolInvocation[];
+}
 
-export const POST = async (request: Request) => {
-  const model = openai("gpt-4o");
-  //  vertex("gemini-1.5-pro-002");
+export async function POST(request: Request) {
   try {
-    const { messages } = await request.json();
+    const { messages }: { messages: Message[] } = await request.json();
 
     const result = streamText({
-      model,
+      model: openai("gpt-4o"),
+      system: "You are a helpful assistant that can get the current time based on the user's IP address",
       messages: convertToCoreMessages(messages),
       tools: {
         checktime: {
           description: "Get the current time based on the user's IP address",
           parameters: z.object({}),
-          execute: async ({ abortSignal }) => {
-            const response = await fetch(TIME_API_URL, { signal: abortSignal });
-
-            if (!response.ok) {
-              throw new Error('Failed to fetch time data');
-            }
-            const data = await response.json();
-            const time = new Date(data.datetime);
+          execute: async () => {
+            const time = new Date();
             console.log("checktime", time.toLocaleTimeString());
-            return {
-              content: `The current time is ${time.toLocaleTimeString()}`
-            }
+            return `The current time is ${time.toLocaleTimeString()}`;
           },
         },
       },
@@ -40,7 +34,7 @@ export const POST = async (request: Request) => {
     const errorMessage = error instanceof Error ? error.message : "Internal server error";
     return new Response(JSON.stringify({ error: errorMessage }), {
       status: 500,
-      headers: { 'Content-Type': 'application/json' }
+      headers: { "Content-Type": "application/json" }
     });
   }
-};
+}
